@@ -2,8 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
-	"log"
 	"sync"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -12,6 +10,7 @@ import (
 	"github.com/fictionbase/fictionbase"
 	"github.com/fictionbase/fictionbase/type/fbhttp"
 	"github.com/fictionbase/fictionbase/type/fbresource"
+	"go.uber.org/zap"
 )
 
 func init() {
@@ -26,31 +25,43 @@ type typeChecker struct {
 }
 
 var (
-	sq *fictionbase.Sqs
-	cw *fictionbase.Cw
+	sq     *fictionbase.Sqs
+	cw     *fictionbase.Cw
+	logger *zap.Logger
 )
 
+// @TODO more Elegant...
 func main() {
+	var typeChecker typeChecker
+	var wg sync.WaitGroup
+	var messages []*sqs.Message
+	var err error
 	sq = fictionbase.NewSqs()
 	cw = fictionbase.NewCw()
-	var typeChecker typeChecker
+	logger, err = zap.NewProduction()
+	if err != nil {
+		logger.Error(err.Error())
+		return
+	}
+
 	for {
-		messages, err := sq.GetFictionbaseMessage()
+		messages, err = sq.GetFictionbaseMessage()
 		if err != nil {
-			log.Fatal(err)
+			logger.Error(err.Error())
+			return
 		}
 		// Get All SQS Data
 		if len(messages) == 0 {
-			log.Fatal(errors.New("Empty Queue"))
+			return
 		}
-		var wg sync.WaitGroup
 		for _, m := range messages {
 			wg.Add(1)
 			go func(m *sqs.Message) {
 				defer wg.Done()
 				err = json.Unmarshal([]byte(*m.Body), &typeChecker)
 				if err != nil {
-					log.Fatal(err)
+					logger.Error(err.Error())
+					return
 				}
 				if typeChecker.TypeKey == "fbresource.Resources" {
 					SetFbresource(m)
@@ -71,7 +82,8 @@ func SetFbresource(message *sqs.Message) {
 	var sqsData fbresource.Resources
 	err := json.Unmarshal([]byte(*message.Body), &sqsData)
 	if err != nil {
-		log.Fatal(err)
+		logger.Error(err.Error())
+		return
 	}
 	// @TODO OtherResources
 	dimensionParam := &cloudwatch.Dimension{
@@ -92,11 +104,13 @@ func SetFbresource(message *sqs.Message) {
 	}
 	err = cw.SendCloudWatch(putMetricDataInput)
 	if err != nil {
-		log.Fatal(err)
+		logger.Error(err.Error())
+		return
 	}
 	sq.DeleteFictionbaseMessage(message)
 	if err != nil {
-		log.Fatal(err)
+		logger.Error(err.Error())
+		return
 	}
 }
 
@@ -105,7 +119,8 @@ func SetFbHTTP(message *sqs.Message) {
 	var sqsData fbhttp.HTTP
 	err := json.Unmarshal([]byte(*message.Body), &sqsData)
 	if err != nil {
-		log.Fatal(err)
+		logger.Error(err.Error())
+		return
 	}
 	dimensionParam := &cloudwatch.Dimension{
 		Name:  aws.String("MonitorHTTP"),
@@ -139,10 +154,12 @@ func SetFbHTTP(message *sqs.Message) {
 	}
 	err = cw.SendCloudWatch(putMetricDataInput)
 	if err != nil {
-		log.Fatal(err)
+		logger.Error(err.Error())
+		return
 	}
 	sq.DeleteFictionbaseMessage(message)
 	if err != nil {
-		log.Fatal(err)
+		logger.Error(err.Error())
+		return
 	}
 }
