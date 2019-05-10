@@ -14,6 +14,5 @@ require (
 replace (
 	github.com/fictionbase/agent => ../agent
 	github.com/fictionbase/fictionbase => ../fictionbase
-	github.com/fictionbase/monitor => ../monitor
 	github.com/fictionbase/router => ../router
 )
