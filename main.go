@@ -25,24 +25,21 @@ type typeChecker struct {
 }
 
 var (
-	sq     *fictionbase.Sqs
-	cw     *fictionbase.Cw
-	logger *zap.Logger
+	sq       *fictionbase.Sqs
+	cw       *fictionbase.Cw
+	logger   *zap.Logger
+	wg       sync.WaitGroup
+	messages []*sqs.Message
+	err      error
 )
 
 // @TODO more Elegant...
 func main() {
-	var typeChecker typeChecker
-	var wg sync.WaitGroup
-	var messages []*sqs.Message
-	var err error
 	sq = fictionbase.NewSqs()
 	cw = fictionbase.NewCw()
-	logger, err = zap.NewProduction()
-	if err != nil {
-		logger.Error(err.Error())
-		return
-	}
+	var typeChecker typeChecker
+
+	logger := fictionbase.GetLogger()
 
 	for {
 		messages, err = sq.GetFictionbaseMessage()
